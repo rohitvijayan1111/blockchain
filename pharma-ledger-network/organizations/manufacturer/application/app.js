@@ -107,8 +107,8 @@ app.get('/queryByKey', async (req, res, next) => {
   }
 
 })
-var port = process.env.PORT || 30000;
-var server = app.listen(port, function () {
+var port = process.env.PORT || 5000;
+var server = app.listen(port, '0.0.0.0', function () {
    var host = server.address().address
    var port = server.address().port
    console.log("App listening at http://%s:%s", host, port)
