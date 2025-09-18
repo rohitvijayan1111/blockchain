@@ -37,3 +37,7 @@ externalPort = 80
 [[ports]]
 localPort = 43747
 externalPort = 3000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "pharma-ledger-network/organizations/manufacturer/application/app.js"]
