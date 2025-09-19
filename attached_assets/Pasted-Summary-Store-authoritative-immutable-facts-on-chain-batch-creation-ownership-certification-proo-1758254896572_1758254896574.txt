@@ -1,0 +1,336 @@
+Summary
+
+Store authoritative, immutable facts on-chain: batch creation/ownership, certification proofs, custody transfers, escrow/payment state changes, order reservations/locks and invalidations. Don’t store large docs/images — store their hash/CID. Keep on-chain objects small and canonical; use Postgres for full metadata, search and UI.
+
+Canonical on-chain objects (what to store & their minimal fields)
+
+Use composite keys like BATCH::{batchId}, CERT::{certId}, TRANSFER::{transferId}, ORDER::{orderId}, PAYMENT::{paymentId}, ESCROW::{escrowId}.
+
+Below each object I give: a short reason, the minimal fields to store on-chain, and a tiny JSON example.
+
+1) BATCH — immutable batch record (creation / key state)
+
+Why on-chain: proves origin, initial qty, owner, and immutable provenance anchor.
+Fields (minimal, required):
+
+objectType: "BATCH"
+
+batchId (UUID)
+
+batchCode (human code)
+
+farmerOrg (MSP e.g. FarmerOrgMSP)
+
+farmerId (actorUserId)
+
+productId (or productCode)
+
+initialQtyKg
+
+currentQtyKg (update on transfers/splits)
+
+unit (KG)
+
+status (PENDING|VERIFIED|LISTED|TRANSFERRED|INVALIDATED)
+
+harvestDate (ISO)
+
+metaHash (sha256 or IPFS CID pointing to full metadata)
+
+parentBatchId (nullable)
+
+createdAt
+
+lastTx (ledger tx id)
+
+Example:
+
+{
+  "objectType":"BATCH",
+  "batchId":"BATCH-uuid-123",
+  "batchCode":"TOM-001",
+  "farmerOrg":"FarmerOrgMSP",
+  "farmerId":"farmer-uuid-1",
+  "productId":"TOMATO-01",
+  "initialQtyKg":500,
+  "currentQtyKg":500,
+  "unit":"KG",
+  "status":"PENDING",
+  "harvestDate":"2025-09-12T06:00:00Z",
+  "metaHash":"ipfs://Qm... or sha256:abcd",
+  "parentBatchId":null,
+  "createdAt":"2025-09-12T06:10:00Z",
+  "lastTx":"tx123..."
+}
+
+2) CERTIFICATE (CERT) — inspector-issued trust badges
+
+Why on-chain: immutable proof that an authorized inspector certified the batch (hash of report).
+Fields:
+
+objectType: "CERT"
+
+certId
+
+batchId
+
+issuerOrg (InspectorOrgMSP)
+
+issuerId (actorUserId)
+
+certType (ORGANIC|FSSAI|PEST_FREE|LAB)
+
+certHash (hash of report/file)
+
+certMetaCID (IPFS/S3 pointer)
+
+issuedAt
+
+txId
+
+Example:
+
+{
+ "objectType":"CERT",
+ "certId":"CERT-uuid-22",
+ "batchId":"BATCH-uuid-123",
+ "issuerOrg":"InspectorOrgMSP",
+ "issuerId":"inspector-uuid-9",
+ "certType":"ORGANIC",
+ "certHash":"sha256:abcd...",
+ "certMetaCID":"ipfs://Qm...",
+ "issuedAt":"2025-09-13T10:00:00Z",
+ "txId":"tx456..."
+}
+
+3) TRANSFER — custody / ownership change
+
+Why on-chain: immutable custody trail (farm→FPO→middleman→logistics→retailer).
+Fields:
+
+objectType: "TRANSFER"
+
+transferId
+
+batchId
+
+fromOrg, fromId (actorUserId)
+
+toOrg, toId
+
+quantityKg
+
+locationHash / locationName (optional)
+
+timestamp
+
+txId
+
+Example:
+
+{
+ "objectType":"TRANSFER",
+ "transferId":"TR-uuid-1",
+ "batchId":"BATCH-uuid-123",
+ "fromOrg":"FarmerOrgMSP",
+ "fromId":"farmer-uuid-1",
+ "toOrg":"MiddlemanOrgMSP",
+ "toId":"middleman-uuid-9",
+ "quantityKg":100,
+ "locationHash":"sha256:loc...",
+ "timestamp":"2025-09-13T09:00:00Z",
+ "txId":"tx789..."
+}
+
+4) ORDER / RESERVATION — quantity lock for buyer
+
+Why on-chain: prove reservation / lock (escrow) and avoid double-selling.
+Fields:
+
+objectType: "ORDER"
+
+orderId (ONDC order id)
+
+batchId
+
+sellerOrg (owner MSP)
+
+buyerId (BAP id)
+
+qtyKg
+
+pricePerUnit
+
+totalAmount
+
+paymentState (INIT/LOCKED/RELEASED/REFUNDED)
+
+deliveryState
+
+createdAt
+
+txId
+
+Note: If payments are off-chain, store only reservation/lock and a hash of payment proof.
+
+5) PAYMENT / ESCROW record
+
+Why on-chain: immutable settlement proof / escrow state transitions.
+Fields (PAYMENT):
+
+objectType: "PAYMENT"
+
+paymentId
+
+orderId
+
+batchId
+
+amount, currency
+
+payer, payee (org or IDs)
+
+status (LOCKED|RELEASED|REFUNDED)
+
+proofHash (receipt hash or CID)
+
+txId, timestamp
+
+Fields (ESCROW) similar; escrowRef, amount, locked, released, lockedAt, releasedAt, txId.
+
+6) INVALIDATION / RECALL
+
+Why on-chain: permanent record of recall/fraud and who signed it.
+Fields:
+
+objectType: "INVALIDATION"
+
+id
+
+batchId
+
+reason
+
+issuedByOrg, issuedById
+
+timestamp
+
+txId
+
+When to write to chain (rules / triggers)
+
+Write only at authoritative events:
+
+CreateBatch → when farmer/coop finalizes a harvest batch (store metaHash + initialQty).
+
+VerifyBatch → when inspector issues certificate (store cert record).
+
+SplitBatch → when a parent batch is split into child batches (update parent qty + create child BATCH records).
+
+RecordTransfer → on handover of custody/ownership.
+
+CreateOrder / ReserveQty → when buyer reserves quantity (locks it).
+
+LockPayment / ReleasePayment → escrow/payment state changes.
+
+InvalidateBatch → fraud/spoiled/recall.
+
+Emit events on each write (see below).
+
+Avoid writing:
+
+UI-only or high-frequency telemetry (use off-chain logs + periodic anchor).
+
+Large binary content (store in IPFS/S3 & capture metaHash).
+
+Events to emit from chaincode (indexer listens)
+
+BatchCreated
+
+BatchVerified / CertificateIssued
+
+BatchSplit
+
+TransferRecorded
+
+OrderCreated / OrderReserved
+
+PaymentLocked / PaymentReleased
+
+BatchInvalidated
+
+Indexer will store these into chain_events table and update batches, transfers, payments, escrows in Postgres — include txId in Postgres chain_tx field.
+
+Private Data Collections (PDC) — what to put in PDCs
+
+Put sensitive fields in PDCs (visible only to consenting orgs) and store a hash on public world state:
+
+PDC_KYC (PlatformOrg + RegulatorOrg + FarmerOrg): bank details, KYC docs. World state holds kycHash.
+
+PDC_PAYMENT (PlatformOrg + FarmerOrg): detailed payment instrument (full receipt), world state holds proofHash or paymentRef.
+
+PDC_INTERNAL (PlatformOrg + FarmerOrg + MiddlemanOrg): private commercial terms.
+
+Endorsement & access mapping (quick)
+
+CreateBatch: OR('FarmerOrgMSP.member','PlatformOrgMSP.member')
+
+VerifyBatch: AND('InspectorOrgMSP.member')
+
+Transfer: require endorsements from fromOrg and toOrg (implement via policy or via separate multi-endorsement invocation)
+
+CreateOrder / ReserveQty: AND('PlatformOrgMSP.member','SellerOrgMSP.member')
+
+InvalidateBatch: MAJORITY('FarmerOrgMSP','InspectorOrgMSP','RegulatorOrgMSP')
+
+Also enforce in chaincode getClientIdentity().getMSPID() checks and require actorUserId in payload.
+
+How to align with your Postgres tables
+
+On each on-chain tx, emit event with canonical object + txId. Indexer listens, then:
+
+Insert/update batches (set chain_tx = txId).
+
+Insert batch_certificates row and set chain_tx.
+
+Insert transfers row and set chain_tx.
+
+Insert payments & escrows rows and set chain_tx.
+
+Append to chain_events JSONB the event payload and tx_hash.
+
+Keep inventory_view refreshed from Postgres materialized view (indexer updates it after each event).
+
+Naming conventions & keys
+
+Use consistent composite keys:
+
+BATCH::{batchId}, CERT::{certId}, TRANSFER::{transferId}, ORDER::{orderId}, PAYMENT::{paymentId}, ESCROW::{escrowId}
+
+Store lastTx and createdAt timestamps in on-chain JSON.
+
+Size & performance notes
+
+Keep records small (≤ a few KB). Use IPFS/S3 for docs and store metaHash on-chain.
+
+Limit writes to authoritative events to reduce throughput burden.
+
+Use CouchDB world state if you want rich JSON queries on ledger itself; still use Postgres as primary search index for ONDC endpoints.
+
+Minimal chaincode write function list (what you must implement)
+
+CreateBatch(payload) — validate actor/farmerId, create BATCH, emit BatchCreated
+
+VerifyBatch(batchId, certPayload) — require Inspector MSP, write CERT, update BATCH.status, emit BatchVerified
+
+SplitBatch(parentId, children[]) — adjust parent qty, create child BATCH records, emit BatchSplit
+
+RecordTransfer(transferPayload) — update BATCH.currentQty, create TRANSFER record, emit TransferRecorded
+
+CreateOrder(orderPayload) / ReserveQty — lock qty, create ORDER, emit OrderCreated
+
+LockPayment / ReleasePayment — write PAYMENT/ESCROW entries and emit PaymentLocked/PaymentReleased
+
+InvalidateBatch(batchId, reason) — mark invalid, emit BatchInvalidated
+
+Query helpers: GetBatch, GetTransfersForBatch, GetCertsForBatch

@@ -19,8 +19,8 @@ VERBOSE="$6"
 : ${VERBOSE:="false"}
 CC_SRC_LANGUAGE=`echo "$CC_SRC_LANGUAGE" | tr [:upper:] [:lower:]`
 CC_RUNTIME_LANGUAGE=node # chaincode runtime language is node.js
-CC_SRC_PATH="organizations/manufacturer/contract/"
-CHINCODE_NAME="pharmaLedgerContract"
+CC_SRC_PATH="organizations/platformorg/contract/"
+CHINCODE_NAME="agricultureSupplyChainContract"
 FABRIC_CFG_PATH=$PWD/../config/
 
 echo
@@ -54,12 +54,12 @@ packageChaincode() {
 installChaincodes() {
   CHAINCODE_ORGS=$1
   starCallFuncWithStepLog "installChaincodes" 2
-	for org in $(seq 1 $CHAINCODE_ORGS); do
-		installChaincode $org
-		sleep $DELAY
-		echo
-	done
-	endCallFuncLogWithMsg "installChaincodes" "Chaincode installed"
+        for org in $(seq 1 $CHAINCODE_ORGS); do
+                installChaincode $org
+                sleep $DELAY
+                echo
+        done
+        endCallFuncLogWithMsg "installChaincodes" "Chaincode installed"
 }
 # installChaincode PEER ORG
 installChaincode() {
@@ -87,7 +87,7 @@ queryInstalled() {
   res=$?
   set +x
   cat log.txt
-	PACKAGE_ID=$(sed -n "/${CHINCODE_NAME}_${VERSION}/{s/^Package ID: //; s/, Label:.*$//; p;}" log.txt)
+        PACKAGE_ID=$(sed -n "/${CHINCODE_NAME}_${VERSION}/{s/^Package ID: //; s/, Label:.*$//; p;}" log.txt)
   verifyResult $res "Query installed on peer0.org${ORG} has failed"
   endCallFuncLogWithMsg "queryInstalled" "Query installed successful with PackageID is ${PACKAGE_ID}"
   #echo "===================== Query installed successful on peer0.org${ORG} on channel ===================== "
@@ -101,6 +101,7 @@ approveForMyOrg() {
   starCallFuncWithStepLog "approveForMyOrg" 4
   set -x
   peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} --version ${VERSION}  --package-id ${PACKAGE_ID} --sequence ${VERSION} >&log.txt
+  res=$?
   set +x
   cat log.txt
   verifyResult $res "Chaincode definition approved on peer0.org${ORG} on channel '$CHANNEL_NAME' failed"
@@ -115,27 +116,34 @@ checkOrgsCommitReadiness() {
   ORG1_BOOL=$2
   ORG2_BOOL=$3
   ORG3_BOOL=$4
+  ORG4_BOOL=$5
   VERIFY_ORG_MSG1=""
   VERIFY_ORG_MSG2=""
   VERIFY_ORG_MSG3=""
+  VERIFY_ORG_MSG4=""
   starCallFuncWithStepLog "checkOrgsCommitReadiness" 5
   for org in $(seq 1 $CHECK_COMMIT_ORGS); do
     if [ $ORG1_BOOL -eq 1 ]; then
-      $VERIFY_ORG_MSG1 = "\"Org1MSP\": true"
+      VERIFY_ORG_MSG1="\"Org1MSP\": true"
     else
-      $VERIFY_ORG_MSG1 = "\"Org1MSP\": false"
+      VERIFY_ORG_MSG1="\"Org1MSP\": false"
     fi
     if [ $ORG2_BOOL -eq 1 ]; then
-      $VERIFY_ORG_MSG2 = "\"Org2MSP\": true"
+      VERIFY_ORG_MSG2="\"Org2MSP\": true"
     else
-      $VERIFY_ORG_MSG2 = "\"Org2MSP\": false"
+      VERIFY_ORG_MSG2="\"Org2MSP\": false"
     fi
     if [ $ORG3_BOOL -eq 1 ]; then
-      $VERIFY_ORG_MSG3 = "\"Org3MSP\": true"
+      VERIFY_ORG_MSG3="\"Org3MSP\": true"
     else
-      $VERIFY_ORG_MSG3 = "\"Org3MSP\": false"
+      VERIFY_ORG_MSG3="\"Org3MSP\": false"
     fi
-    VERIFY_MSG="$VERIFY_ORG_MSG1 $VERIFY_ORG_MSG2 $VERIFY_ORG_MSG3"
+    if [ $ORG4_BOOL -eq 1 ]; then
+      VERIFY_ORG_MSG4="\"Org4MSP\": true"
+    else
+      VERIFY_ORG_MSG4="\"Org4MSP\": false"
+    fi
+    VERIFY_MSG="$VERIFY_ORG_MSG1 $VERIFY_ORG_MSG2 $VERIFY_ORG_MSG3 $VERIFY_ORG_MSG4"
     checkCommitReadiness $org $VERIFY_MSG
     sleep $DELAY
     echo
@@ -148,11 +156,11 @@ checkCommitReadiness() {
   shift 1
   setGlobalVars $ORG
   starCallFuncWithStepLog "checkCommitReadiness org$ORG" 5
-	local rc=1
-	local COUNTER=1
-	# continue to poll
+        local rc=1
+        local COUNTER=1
+        # continue to poll
   # we either get a successful response, or reach MAX RETRY
-	while [ $rc -ne 0 -a $COUNTER -lt $MAX_RETRY ] ; do
+        while [ $rc -ne 0 -a $COUNTER -lt $MAX_RETRY ] ; do
     sleep $DELAY
     echo "Attempting to check the commit readiness of the chaincode definition on peer0.org${ORG}, Retry after $DELAY seconds."
     set -x
@@ -164,8 +172,8 @@ checkCommitReadiness() {
     do
       grep "$var" log.txt &>/dev/null || let rc=1
     done
-		COUNTER=$(expr $COUNTER + 1)
-	done
+                COUNTER=$(expr $COUNTER + 1)
+        done
   cat log.txt
   if test $rc -eq 0; then
     endCallFuncLogWithMsg "checkCommitReadiness" "Checking the commit readiness of the chaincode definition successful on peer0.org${ORG} on channel '$CHANNEL_NAME'"
@@ -179,7 +187,7 @@ checkCommitReadiness() {
 
 # commitChaincodeDefinition VERSION PEER ORG (PEER ORG)...
 commitChaincodeDefinition() {
-  parsePeerConnectionParameters $@
+  parsePeerConnectionParameters "$@"
   res=$?
   verifyResult $res "Invoke transaction failed on channel '$CHANNEL_NAME' due to uneven number of peer and org parameters "
   starCallFuncWithStepLog "commitChaincodeDefinition" 6
@@ -187,7 +195,7 @@ commitChaincodeDefinition() {
   # peer (if join was successful), let's supply it directly as we know
   # it using the "-o" option
   set -x
-  peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} $PEER_CONN_PARMS --version ${VERSION} --sequence ${VERSION} >&log.txt
+  peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} $PEER_CONN_PARMS --version ${VERSION} --sequence ${VERSION} --signature-policy "OutOf(2,'Org1MSP.peer','Org2MSP.peer','Org3MSP.peer','Org4MSP.peer')" >&log.txt
   res=$?
   set +x
   cat log.txt
@@ -200,12 +208,12 @@ commitChaincodeDefinition() {
 queryAllCommitted() {
   COMMITTED_ORGS=$1
   starCallFuncWithStepLog "queryAllCommitted" 7
-	for org in $(seq 1 $COMMITTED_ORGS); do
-		queryCommitted $org
-		sleep $DELAY
-		echo
-	done
-	endCallFuncLogWithMsg "queryAllCommitted" "Chaincode installed"
+        for org in $(seq 1 $COMMITTED_ORGS); do
+                queryCommitted $org
+                sleep $DELAY
+                echo
+        done
+        endCallFuncLogWithMsg "queryAllCommitted" "Chaincode installed"
 }
 # queryCommitted ORG
 queryCommitted() {
@@ -213,21 +221,21 @@ queryCommitted() {
   setGlobalVars $ORG
   EXPECTED_RESULT="Version: ${VERSION}, Sequence: ${VERSION}, Endorsement Plugin: escc, Validation Plugin: vscc"
   starCallFuncWithStepLog "queryCommitted org$ORG" 7
-	local rc=1
-	local COUNTER=1
-	# continue to poll
+        local rc=1
+        local COUNTER=1
+        # continue to poll
   # we either get a successful response, or reach MAX RETRY
-	while [ $rc -ne 0 -a $COUNTER -lt $MAX_RETRY ] ; do
+        while [ $rc -ne 0 -a $COUNTER -lt $MAX_RETRY ] ; do
     sleep $DELAY
     echo "Attempting to Query committed status on peer0.org${ORG}, Retry after $DELAY seconds."
     set -x
     peer lifecycle chaincode querycommitted --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} >&log.txt
     res=$?
     set +x
-		test $res -eq 0 && VALUE=$(cat log.txt | grep -o '^Version: [0-9], Sequence: [0-9], Endorsement Plugin: escc, Validation Plugin: vscc')
+                test $res -eq 0 && VALUE=$(cat log.txt | grep -o '^Version: [0-9], Sequence: [0-9], Endorsement Plugin: escc, Validation Plugin: vscc')
     test "$VALUE" = "$EXPECTED_RESULT" && let rc=0
-		COUNTER=$(expr $COUNTER + 1)
-	done
+                COUNTER=$(expr $COUNTER + 1)
+        done
   echo
   cat log.txt
   verifyResult $res "Query commit failed on peer0.org${ORG} on channel '$CHANNEL_NAME' failed"
@@ -237,34 +245,39 @@ queryCommitted() {
 ## at first we package the chaincode
 packageChaincode 1
 
-## Install chaincode on peer0.org1 peer0.org2, and peer0.org3
-installChaincodes 3
+## Install chaincode on peer0.org1 peer0.org2, peer0.org3, and peer0.org4
+installChaincodes 4
 ## query whether the chaincode is installed
 queryInstalled 1
 
 ## approve Org1
 approveForMyOrg 1
 ## check whether the chaincode definition is ready to be committed, orgs one should be approved
-checkOrgsCommitReadiness 3 1 0 0
+checkOrgsCommitReadiness 4 1 0 0 0
 
 ## approve org2
 approveForMyOrg 2
 ## check whether the chaincode definition is ready to be committed, two orgs should be approved
-checkOrgsCommitReadiness 3 1 1 0
+checkOrgsCommitReadiness 4 1 1 0 0
 
 ## approve org3
 approveForMyOrg 3
-## check whether the chaincode definition is ready to be committed, all 3 orgs should be approved
-checkOrgsCommitReadiness 3 1 1 1
+## check whether the chaincode definition is ready to be committed, three orgs should be approved
+checkOrgsCommitReadiness 4 1 1 1 0
+
+## approve org4
+approveForMyOrg 4
+## check whether the chaincode definition is ready to be committed, all 4 orgs should be approved
+checkOrgsCommitReadiness 4 1 1 1 1
 
 ## now that we know for sure called orgs have approved, commit the definition
-commitChaincodeDefinition 1 2 3
+commitChaincodeDefinition 1 2 3 4
 
-## query on both orgs to see that the definition committed successfully
-queryAllCommitted 3
+## query on all 4 orgs to see that the definition committed successfully
+queryAllCommitted 4
 
 echo
-echo "========= Pharma Ledger Network (PLN) contract successfully deployed on channel $CHANNEL_NAME  =========== "
+echo "========= Agriculture Supply Chain contract successfully deployed on channel $CHANNEL_NAME  =========== "
 
 echo
 echo " _____   _   _   ____   "
