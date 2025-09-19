@@ -13,7 +13,7 @@ VERBOSE="$4"
 : ${DELAY:="3"}
 : ${MAX_RETRY:="5"}
 : ${VERBOSE:="false"}
-TOTAL_ORGS=3
+TOTAL_ORGS=4
 # import utils
 . scripts/utils.sh
 
@@ -46,7 +46,7 @@ createChannelTxn() {
 
 createAncorPeerTxn() {
 	starCallFuncWithStepLog "createAncorPeerTxn" 2
-	for orgmsp in Org1MSP Org2MSP Org3MSP; do
+	for orgmsp in Org1MSP Org2MSP Org3MSP Org4MSP; do
   displayMsg "Generating anchor peer update transaction for ${orgmsp}"
 	set -x
 	configtxgen -profile PharmaLedgerChannel -outputAnchorPeersUpdate ./channel-artifacts/${orgmsp}anchors.tx -channelID $CHANNEL_NAME -asOrg ${orgmsp}

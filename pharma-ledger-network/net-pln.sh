@@ -163,6 +163,18 @@ function createOrgs() {
       exit 1
     fi
     echo "##########################################################"
+    echo "############ Create Org4 Identities ######################"
+    echo "##########################################################"
+
+    set -x
+    cryptogen generate --config=./organizations/cryptogen/crypto-config-org4.yaml --output="organizations"
+    res=$?
+    set +x
+    if [ $res -ne 0 ]; then
+      echo "Failed to generate certificates..."
+      exit 1
+    fi
+    echo "##########################################################"
     echo "############ Create Orderer Org Identities ###############"
     echo "##########################################################"
 

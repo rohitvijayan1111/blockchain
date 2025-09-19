@@ -83,7 +83,7 @@ From inside `fabric-samples`:
 
 ```bash
 cryptogen generate \
---config=../pharma-ledger-network/organizations/cryptogen/crypto-config-org1.yaml \
+--config=../pharma-ledger-network/organizations/cryptogen/crypto-config-org4.yaml \
 --output="../pharma-ledger-network/organizations"
 
 cryptogen generate \
