@@ -36,6 +36,8 @@ echo
 # import utils
 . scripts/utils.sh
 
+# signature policy for the chaincode definition (keep consistent for approve/check/commit)
+SIGNATURE_POLICY="OutOf(2,'Org1MSP.peer','Org2MSP.peer','Org3MSP.peer','Org4MSP.peer')"
 
 packageChaincode() {
   ORG=$1
@@ -100,15 +102,19 @@ approveForMyOrg() {
   setGlobalVars $ORG
   starCallFuncWithStepLog "approveForMyOrg" 4
   set -x
-  peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} --version ${VERSION}  --package-id ${PACKAGE_ID} --sequence ${VERSION} >&log.txt
+  peer lifecycle chaincode approveformyorg \
+    -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED \
+    --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} \
+    --version ${VERSION} --package-id ${PACKAGE_ID} --sequence ${VERSION} \
+    --signature-policy "${SIGNATURE_POLICY}" >&log.txt
   res=$?
   set +x
   cat log.txt
   verifyResult $res "Chaincode definition approved on peer0.org${ORG} on channel '$CHANNEL_NAME' failed"
   endCallFuncLogWithMsg "approveForMyOrg" "Chaincode definition approved on peer0.org${ORG} on channel '$CHANNEL_NAME'"
-  #echo "===================== Chaincode definition approved on peer0.org${ORG} on channel '$CHANNEL_NAME' ===================== "
   echo
 }
+
 
 # checkCommitReadiness VERSION PEER ORG
 checkOrgsCommitReadiness() {
@@ -164,7 +170,7 @@ checkCommitReadiness() {
     sleep $DELAY
     echo "Attempting to check the commit readiness of the chaincode definition on peer0.org${ORG}, Retry after $DELAY seconds."
     set -x
-    peer lifecycle chaincode checkcommitreadiness --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} --version ${VERSION} --sequence ${VERSION} --output json >&log.txt
+    peer lifecycle chaincode checkcommitreadiness --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} --version ${VERSION} --sequence ${VERSION} --signature-policy "${SIGNATURE_POLICY}" --output json >&log.txt
     res=$?
     set +x
     let rc=0
@@ -195,7 +201,8 @@ commitChaincodeDefinition() {
   # peer (if join was successful), let's supply it directly as we know
   # it using the "-o" option
   set -x
-  peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} $PEER_CONN_PARMS --version ${VERSION} --sequence ${VERSION} --signature-policy "OutOf(2,'Org1MSP.peer','Org2MSP.peer','Org3MSP.peer','Org4MSP.peer')" >&log.txt
+  peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA --channelID $CHANNEL_NAME --name ${CHINCODE_NAME} $PEER_CONN_PARMS --version ${VERSION} --sequence ${VERSION} --signature-policy "${SIGNATURE_POLICY}" >&log.txt
+
   res=$?
   set +x
   cat log.txt
@@ -250,7 +257,7 @@ installChaincodes 4
 ## query whether the chaincode is installed
 queryInstalled 1
 
-## approve Org1
+## ap prove Org1
 approveForMyOrg 1
 ## check whether the chaincode definition is ready to be committed, orgs one should be approved
 checkOrgsCommitReadiness 4 1 0 0 0
